@@ -443,19 +443,35 @@ function drawScene() {
 }
 
 // ---------------------------------------------------------------- main
-// 1. Generate the meme picture (meme.png) next to this file.
-// 2. Copy POST.json from the repository to /output, where the gate reads it
-//    (the entry is the post itself; the house reads the post from X).
-//    Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR
-//    stand in for /bot and /output:
-//      mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
-drawScene();
-writeFileSync(OUT, encodePNG(W, H, Buffer.from(px)));
-console.log("wrote", OUT, W + "x" + H);
-
+// The grader runs this as `node /bot/main.ts` with the repository
+// read-only at /bot and an empty writable /output (MAKEFUN_BOT_DIR and
+// MAKEFUN_OUTPUT_DIR in the environment). So the meme is written next to
+// this file when that directory is writable, and to the output directory
+// when it is not; the one thing that must never fail is copying POST.json
+// to the output directory, where the gate reads it (the entry is the post
+// itself; the house reads the post from X).
+// Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR
+// stand in for /bot and /output:
+//   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
 const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? "/bot";
 const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 mkdirSync(OUTPUT_DIR, { recursive: true });
+
+drawScene();
+const png = encodePNG(W, H, Buffer.from(px));
+let wroteMeme = false;
+for (const target of [OUT, join(OUTPUT_DIR, "meme.png")]) {
+  try {
+    writeFileSync(target, png);
+    console.log("wrote", target, W + "x" + H);
+    wroteMeme = true;
+    break;
+  } catch (err) {
+    console.error(`could not write ${target}: ${err.message}`);
+  }
+}
+if (!wroteMeme) console.error("meme.png could not be written anywhere; continuing with POST.json");
+
 try {
   copyFileSync(join(BOT_DIR, "POST.json"), join(OUTPUT_DIR, "POST.json"));
   console.log("copied POST.json to", OUTPUT_DIR);
